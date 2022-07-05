@@ -349,7 +349,7 @@ describe('EntityCollectionReducer', () => {
       const collection = state['Hero'];
 
       expect(collection.ids).toEqual([3]);
-      expect(collection.loaded).toBe(true);
+      expect(collection.loaded).toBe(false);
       expect(collection.loading).toBe(false);
     });
 
