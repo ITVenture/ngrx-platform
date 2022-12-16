@@ -1,4 +1,4 @@
-import { RouterStateSnapshot, ActivatedRouteSnapshot } from '@angular/router';
+import { ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import { BaseRouterStoreState, RouterStateSerializer } from './base';
 
 export interface MinimalActivatedRouteSnapshot {
@@ -9,6 +9,7 @@ export interface MinimalActivatedRouteSnapshot {
   fragment: ActivatedRouteSnapshot['fragment'];
   data: ActivatedRouteSnapshot['data'];
   outlet: ActivatedRouteSnapshot['outlet'];
+  title: ActivatedRouteSnapshot['title'];
   firstChild?: MinimalActivatedRouteSnapshot;
   children: MinimalActivatedRouteSnapshot[];
 }
@@ -37,13 +38,17 @@ export class MinimalRouterStateSerializer
       data: route.data,
       url: route.url,
       outlet: route.outlet,
+      title: route.title,
       routeConfig: route.routeConfig
         ? {
             path: route.routeConfig.path,
             pathMatch: route.routeConfig.pathMatch,
             redirectTo: route.routeConfig.redirectTo,
             outlet: route.routeConfig.outlet,
-            title: route.routeConfig.title,
+            title:
+              typeof route.routeConfig.title === 'string'
+                ? route.routeConfig.title
+                : undefined,
           }
         : null,
       queryParams: route.queryParams,

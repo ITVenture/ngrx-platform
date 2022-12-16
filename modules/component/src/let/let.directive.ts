@@ -1,23 +1,18 @@
 import {
-  ChangeDetectorRef,
   Directive,
   ErrorHandler,
   Input,
-  NgZone,
   OnDestroy,
   OnInit,
   TemplateRef,
   ViewContainerRef,
 } from '@angular/core';
 import { Subscription } from 'rxjs';
-import {
-  ObservableOrPromise,
-  PotentialObservable,
-} from '../core/potential-observable';
-import { createRenderScheduler } from '../core/render-scheduler';
+import { PotentialObservableResult } from '../core/potential-observable';
+import { RenderScheduler } from '../core/render-scheduler';
 import { createRenderEventManager } from '../core/render-event/manager';
 
-type LetViewContextValue<PO> = PO extends ObservableOrPromise<infer V> ? V : PO;
+type LetViewContextValue<PO> = PotentialObservableResult<PO>;
 
 export interface LetViewContext<PO> {
   /**
@@ -29,17 +24,13 @@ export interface LetViewContext<PO> {
    */
   ngrxLet: LetViewContextValue<PO>;
   /**
-   * `*ngrxLet="obs$; let e = $error"` or `*ngrxLet="obs$; $error as e"`
+   * `*ngrxLet="obs$; let e = error"` or `*ngrxLet="obs$; error as e"`
    */
-  $error: any;
+  error: any;
   /**
-   * `*ngrxLet="obs$; let c = $complete"` or `*ngrxLet="obs$; $complete as c"`
+   * `*ngrxLet="obs$; let c = complete"` or `*ngrxLet="obs$; complete as c"`
    */
-  $complete: boolean;
-  /**
-   * `*ngrxLet="obs$; let s = $suspense"` or `*ngrxLet="obs$; $suspense as s"`
-   */
-  $suspense: boolean;
+  complete: boolean;
 }
 
 /**
@@ -67,12 +58,21 @@ export interface LetViewContext<PO> {
  * ### Tracking Different Observable Events
  *
  * ```html
- * <ng-container *ngrxLet="number$ as n; let e = $error; let c = $complete">
+ * <ng-container *ngrxLet="number$ as n; error as e; complete as c">
  *   <app-number [number]="n" *ngIf="!e && !c">
  *   </app-number>
  *
  *   <p *ngIf="e">There is an error: {{ e }}</p>
  *   <p *ngIf="c">Observable is completed.</p>
+ * </ng-container>
+ * ```
+ *
+ * ### Combining Multiple Observables
+ *
+ * ```html
+ * <ng-container *ngrxLet="{ users: users$, query: query$ } as vm">
+ *   <app-search-bar [query]="vm.query"></app-search-bar>
+ *   <app-user-list [users]="vm.users"></app-user-list>
  * </ng-container>
  * ```
  *
@@ -103,90 +103,79 @@ export interface LetViewContext<PO> {
  *
  * @publicApi
  */
-@Directive({ selector: '[ngrxLet]' })
+@Directive({
+  selector: '[ngrxLet]',
+  providers: [RenderScheduler],
+})
 export class LetDirective<PO> implements OnInit, OnDestroy {
   private isMainViewCreated = false;
   private isSuspenseViewCreated = false;
   private readonly viewContext: LetViewContext<PO | undefined> = {
     $implicit: undefined,
     ngrxLet: undefined,
-    $error: undefined,
-    $complete: false,
-    $suspense: true,
+    error: undefined,
+    complete: false,
   };
-  private readonly renderScheduler = createRenderScheduler({
-    ngZone: this.ngZone,
-    cdRef: this.cdRef,
-  });
-  private readonly renderEventManager = createRenderEventManager<
-    LetViewContextValue<PO>
-  >({
-    reset: () => {
+  private readonly renderEventManager = createRenderEventManager<PO>({
+    suspense: () => {
       this.viewContext.$implicit = undefined;
       this.viewContext.ngrxLet = undefined;
-      this.viewContext.$error = undefined;
-      this.viewContext.$complete = false;
-      this.viewContext.$suspense = true;
+      this.viewContext.error = undefined;
+      this.viewContext.complete = false;
 
       this.renderSuspenseView();
     },
     next: (event) => {
       this.viewContext.$implicit = event.value;
       this.viewContext.ngrxLet = event.value;
-      this.viewContext.$suspense = false;
 
       if (event.reset) {
-        this.viewContext.$error = undefined;
-        this.viewContext.$complete = false;
+        this.viewContext.error = undefined;
+        this.viewContext.complete = false;
       }
 
-      this.renderMainView();
+      this.renderMainView(event.synchronous);
     },
     error: (event) => {
-      this.viewContext.$error = event.error;
-      this.viewContext.$suspense = false;
+      this.viewContext.error = event.error;
 
       if (event.reset) {
         this.viewContext.$implicit = undefined;
         this.viewContext.ngrxLet = undefined;
-        this.viewContext.$complete = false;
+        this.viewContext.complete = false;
       }
 
-      this.renderMainView();
+      this.renderMainView(event.synchronous);
       this.errorHandler.handleError(event.error);
     },
     complete: (event) => {
-      this.viewContext.$complete = true;
-      this.viewContext.$suspense = false;
+      this.viewContext.complete = true;
 
       if (event.reset) {
         this.viewContext.$implicit = undefined;
         this.viewContext.ngrxLet = undefined;
-        this.viewContext.$error = undefined;
+        this.viewContext.error = undefined;
       }
 
-      this.renderMainView();
+      this.renderMainView(event.synchronous);
     },
   });
   private readonly subscription = new Subscription();
 
   @Input()
   set ngrxLet(potentialObservable: PO) {
-    this.renderEventManager.nextPotentialObservable(
-      potentialObservable as PotentialObservable<LetViewContextValue<PO>>
-    );
+    this.renderEventManager.nextPotentialObservable(potentialObservable);
   }
 
-  @Input('ngrxLetSuspenseTpl') suspenseTemplateRef?: TemplateRef<
-    LetViewContext<PO>
-  >;
+  @Input('ngrxLetSuspenseTpl') suspenseTemplateRef?: TemplateRef<unknown>;
 
   constructor(
-    private readonly cdRef: ChangeDetectorRef,
-    private readonly ngZone: NgZone,
-    private readonly mainTemplateRef: TemplateRef<LetViewContext<PO>>,
+    private readonly mainTemplateRef: TemplateRef<
+      LetViewContext<PO | undefined>
+    >,
     private readonly viewContainerRef: ViewContainerRef,
-    private readonly errorHandler: ErrorHandler
+    private readonly errorHandler: ErrorHandler,
+    private readonly renderScheduler: RenderScheduler
   ) {}
 
   static ngTemplateContextGuard<PO>(
@@ -206,7 +195,7 @@ export class LetDirective<PO> implements OnInit, OnDestroy {
     this.subscription.unsubscribe();
   }
 
-  private renderMainView(): void {
+  private renderMainView(isSyncEvent: boolean): void {
     if (this.isSuspenseViewCreated) {
       this.isSuspenseViewCreated = false;
       this.viewContainerRef.clear();
@@ -220,11 +209,13 @@ export class LetDirective<PO> implements OnInit, OnDestroy {
       );
     }
 
-    this.renderScheduler.schedule();
+    if (!isSyncEvent) {
+      this.renderScheduler.schedule();
+    }
   }
 
   private renderSuspenseView(): void {
-    if (this.suspenseTemplateRef && this.isMainViewCreated) {
+    if (this.isMainViewCreated) {
       this.isMainViewCreated = false;
       this.viewContainerRef.clear();
     }
@@ -232,10 +223,6 @@ export class LetDirective<PO> implements OnInit, OnDestroy {
     if (this.suspenseTemplateRef && !this.isSuspenseViewCreated) {
       this.isSuspenseViewCreated = true;
       this.viewContainerRef.createEmbeddedView(this.suspenseTemplateRef);
-    }
-
-    if (this.isMainViewCreated || this.isSuspenseViewCreated) {
-      this.renderScheduler.schedule();
     }
   }
 }

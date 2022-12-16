@@ -5,7 +5,7 @@ import {
 } from '@ngrx/store';
 import { RouterStateSelectors } from './models';
 import { RouterReducerState } from './reducer';
-import { DEFAULT_ROUTER_FEATURENAME } from './router_store_module';
+import { DEFAULT_ROUTER_FEATURENAME } from './router_store_config';
 
 export function createRouterSelector<
   State extends Record<string, any>
@@ -13,7 +13,7 @@ export function createRouterSelector<
   return createFeatureSelector(DEFAULT_ROUTER_FEATURENAME);
 }
 
-export function getSelectors<V>(
+export function getSelectors<V extends Record<string, any>>(
   selectState: (state: V) => RouterReducerState<any> = createRouterSelector<V>()
 ): RouterStateSelectors<V> {
   const selectRouterState = createSelector(
@@ -54,14 +54,20 @@ export function getSelectors<V>(
     selectCurrentRoute,
     (route) => route && route.data
   );
+  const selectRouteDataParam = (param: string) =>
+    createSelector(selectRouteData, (data) => data && data[param]);
   const selectUrl = createSelector(
     selectRouterState,
     (routerState) => routerState && routerState.url
   );
-  const selectTitle = createSelector(
-    selectCurrentRoute,
-    (route) => route && route.routeConfig?.title
-  );
+  const selectTitle = createSelector(selectCurrentRoute, (route) => {
+    if (!route?.routeConfig) {
+      return undefined;
+    }
+    return typeof route.routeConfig.title === 'string'
+      ? route.routeConfig.title // static title
+      : route.title; // resolved title
+  });
 
   return {
     selectCurrentRoute,
@@ -71,6 +77,7 @@ export function getSelectors<V>(
     selectRouteParams,
     selectRouteParam,
     selectRouteData,
+    selectRouteDataParam,
     selectUrl,
     selectTitle,
   };

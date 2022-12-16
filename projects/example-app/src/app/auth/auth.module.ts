@@ -30,9 +30,8 @@ export const COMPONENTS = [
       name: fromAuth.authFeatureKey,
       reducer: fromAuth.reducers,
     }),
-    EffectsModule.forFeature([AuthEffects]),
+    EffectsModule.forFeature(AuthEffects),
   ],
   declarations: COMPONENTS,
-  entryComponents: [LogoutConfirmationDialogComponent],
 })
 export class AuthModule {}

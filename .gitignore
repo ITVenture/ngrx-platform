@@ -57,6 +57,7 @@ __build__/**
 *.swp
 !/typings/custom.d.ts
 .vscode/
+.vim/
 
 # Build Artifacts #
 release
@@ -75,3 +76,5 @@ example-dist/
 *.tgz
 modules/*/schematics-core/testing
 !modules/schematics-core/testing
+
+.angular
