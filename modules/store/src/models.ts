@@ -1,4 +1,4 @@
-import { ImportedNgModuleProviders } from '@angular/core';
+import { type ValueEqualityFn } from '@angular/core';
 
 export interface Action {
   type: string;
@@ -143,10 +143,6 @@ export type FunctionWithParametersType<P extends unknown[], R = void> = (
   ...args: P
 ) => R;
 
-export type ParametersType<T> = T extends (...args: infer U) => unknown
-  ? U
-  : never;
-
 export interface RuntimeChecks {
   /**
    * Verifies if the state is serializable
@@ -174,4 +170,11 @@ export interface RuntimeChecks {
    * Verifies that action types are not registered more than once
    */
   strictActionTypeUniqueness?: boolean;
+}
+
+export interface SelectSignalOptions<T> {
+  /**
+   *  A comparison function which defines equality for select results.
+   */
+  equal?: ValueEqualityFn<T>;
 }

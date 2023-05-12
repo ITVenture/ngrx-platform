@@ -62,9 +62,8 @@ import { AppComponent } from '@example-app/core/containers';
      */
     StoreDevtoolsModule.instrument({
       name: 'NgRx Book Store App',
-
       // In a production build you would want to disable the Store Devtools
-      // logOnly: environment.production,
+      // logOnly: !isDevMode(),
     }),
 
     /**

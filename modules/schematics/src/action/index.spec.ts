@@ -44,9 +44,7 @@ describe('Action Schematic', () => {
       name: 'baz',
     });
 
-    const tree = await schematicRunner
-      .runSchematicAsync('action', options, appTree)
-      .toPromise();
+    const tree = await schematicRunner.runSchematic('action', options, appTree);
     const files = tree.files;
     expect(
       files.includes(`${specifiedProjectPath}/src/lib/foo.actions.ts`)
@@ -54,9 +52,11 @@ describe('Action Schematic', () => {
   });
 
   it('should create one file', async () => {
-    const tree = await schematicRunner
-      .runSchematicAsync('action', defaultOptions, appTree)
-      .toPromise();
+    const tree = await schematicRunner.runSchematic(
+      'action',
+      defaultOptions,
+      appTree
+    );
     expect(
       tree.files.includes(`${projectPath}/src/app/foo.actions.ts`)
     ).toBeTruthy();
@@ -66,9 +66,7 @@ describe('Action Schematic', () => {
     const options = {
       ...defaultOptions,
     };
-    const tree = await schematicRunner
-      .runSchematicAsync('action', options, appTree)
-      .toPromise();
+    const tree = await schematicRunner.runSchematic('action', options, appTree);
     expect(
       tree.files.includes(`${projectPath}/src/app/foo.actions.spec.ts`)
     ).toBe(false);
@@ -79,15 +77,16 @@ describe('Action Schematic', () => {
       ...defaultOptions,
     };
 
-    const tree = await schematicRunner
-      .runSchematicAsync('action', options, appTree)
-      .toPromise();
+    const tree = await schematicRunner.runSchematic('action', options, appTree);
     const fileContent = tree.readContent(
       `${projectPath}/src/app/foo.actions.ts`
     );
 
-    expect(fileContent).toMatch(/export const loadFoos = createAction\(/);
-    expect(fileContent).toMatch(/\[Foo\] Load Foos'/);
+    expect(fileContent).toMatch(
+      /export const FooActions = createActionGroup\(/
+    );
+    expect(fileContent).toMatch(new RegExp(`source: 'Foo'`));
+    expect(fileContent).toMatch(/Load Foos'/);
   });
 
   it('should create success/error actions when the api flag is set', async () => {
@@ -96,18 +95,19 @@ describe('Action Schematic', () => {
       api: true,
     };
 
-    const tree = await schematicRunner
-      .runSchematicAsync('action', options, appTree)
-      .toPromise();
+    const tree = await schematicRunner.runSchematic('action', options, appTree);
     const fileContent = tree.readContent(
       `${projectPath}/src/app/foo.actions.ts`
     );
 
-    expect(fileContent).toMatch(/export const loadFoos = createAction\(/);
-    expect(fileContent).toMatch(/\[Foo\] Load Foos Success/);
-    expect(fileContent).toMatch(/props<{ data: any }>\(\)/);
-    expect(fileContent).toMatch(/\[Foo\] Load Foos Failure/);
-    expect(fileContent).toMatch(/props<{ error: any }>\(\)/);
+    expect(fileContent).toMatch(
+      /export const FooActions = createActionGroup\(/
+    );
+    expect(fileContent).toMatch(new RegExp(`source: 'Foo'`));
+    expect(fileContent).toMatch(/Load Foos Success/);
+    expect(fileContent).toMatch(/props<{ data: unknown }>\(\)/);
+    expect(fileContent).toMatch(/Load Foos Failure/);
+    expect(fileContent).toMatch(/props<{ error: unknown }>\(\)/);
   });
 
   it.each(['load', 'delete', 'update'])(
@@ -118,75 +118,72 @@ describe('Action Schematic', () => {
         prefix: prefix,
       };
 
-      const tree = await schematicRunner
-        .runSchematicAsync('action', options, appTree)
-        .toPromise();
+      const tree = await schematicRunner.runSchematic(
+        'action',
+        options,
+        appTree
+      );
       const fileContent = tree.readContent(
         `${projectPath}/src/app/foo.actions.ts`
       );
       expect(fileContent).toMatch(
-        new RegExp(`export const ${prefix}Foos = createAction`)
+        new RegExp(`export const FooActions = createActionGroup`)
       );
+      expect(fileContent).toMatch(new RegExp(`source: 'Foo'`));
       expect(fileContent).toMatch(
-        new RegExp(`'\\[Foo] ${capitalize(prefix)} Foos'`)
+        new RegExp(`'${capitalize(prefix)} Foos': emptyProps\\(\\),`)
       );
     }
   );
 
   describe('api', () => {
     it('should group within an "actions" folder if group is set', async () => {
-      const tree = await schematicRunner
-        .runSchematicAsync(
-          'action',
-          {
-            ...defaultOptions,
-            group: true,
-          },
-          appTree
-        )
-        .toPromise();
+      const tree = await schematicRunner.runSchematic(
+        'action',
+        {
+          ...defaultOptions,
+          group: true,
+        },
+        appTree
+      );
       expect(
         tree.files.includes(`${projectPath}/src/app/actions/foo.actions.ts`)
       ).toBeTruthy();
     });
 
     it('should create a success class based on the provided name, given api', async () => {
-      const tree = await schematicRunner
-        .runSchematicAsync(
-          'action',
-          {
-            ...defaultOptions,
-            api: true,
-          },
-          appTree
-        )
-        .toPromise();
+      const tree = await schematicRunner.runSchematic(
+        'action',
+        {
+          ...defaultOptions,
+          api: true,
+        },
+        appTree
+      );
       const fileContent = tree.readContent(
         `${projectPath}/src/app/foo.actions.ts`
       );
 
       expect(fileContent).toMatch(
-        /export const loadFoosSuccess = createAction\(\r?\n?\s*'\[Foo\] Load Foos Success'\r?\n?\s*,/
+        /'Load Foos Success': props<\{ data: unknown }>\(\),/
       );
     });
 
     it('should create a failure class based on the provided name, given api', async () => {
-      const tree = await schematicRunner
-        .runSchematicAsync(
-          'action',
-          {
-            ...defaultOptions,
-            api: true,
-          },
-          appTree
-        )
-        .toPromise();
+      const tree = await schematicRunner.runSchematic(
+        'action',
+        {
+          ...defaultOptions,
+          api: true,
+        },
+        appTree
+      );
       const fileContent = tree.readContent(
         `${projectPath}/src/app/foo.actions.ts`
       );
 
       expect(fileContent).toMatch(
-        /export const loadFoosFailure = createAction\(\r?\n?\s*'\[Foo\] Load Foos Failure'\r?\n?\s*,/
+        /'Load Foos Failure': props<\{ error: unknown }>\(\),/
       );
     });
   });

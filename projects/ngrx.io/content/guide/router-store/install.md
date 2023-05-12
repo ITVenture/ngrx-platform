@@ -21,6 +21,7 @@ This command will automate the following steps:
 1. Update `package.json` > `dependencies` with `@ngrx/router-store`.
 2. Run `npm install` to install those dependencies. 
 3. By default, will update  `src/app/app.module.ts` > `imports` array with `StoreRouterConnectingModule.forRoot()`. If you provided flags then the command will attempt to locate and update module found by the flags.
+4. If the project is using a `standalone bootstrap`, it adds `provideRouterStore()` into the application config.
 
 ## Installing with `npm`
 

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import {
+  computed,
   Inject,
   Injectable,
   InjectionToken,
@@ -12,7 +13,7 @@ import {
   OnStateInit,
   OnStoreInit,
   provideComponentStore,
-} from '@ngrx/component-store';
+} from '..';
 import { createSelector } from '@ngrx/store';
 import {
   asyncScheduler,
@@ -1378,6 +1379,187 @@ describe('Component Store', () => {
       });
 
       componentStore.ngOnDestroy();
+    });
+  });
+
+  describe('selectSignal', () => {
+    it('creates a signal from the provided state projector function', () => {
+      const store = new ComponentStore<{ foo: string }>({ foo: 'bar' });
+      let projectorExecutionCount = 0;
+
+      const foo = store.selectSignal((state) => {
+        projectorExecutionCount++;
+        return state.foo;
+      });
+
+      expect(foo()).toBe('bar');
+
+      foo();
+      store.patchState({ foo: 'baz' });
+      foo();
+
+      expect(foo()).toBe('baz');
+      expect(projectorExecutionCount).toBe(2);
+    });
+
+    it('creates a signal from the provided state projector function with options', () => {
+      const store = new ComponentStore<{ arr: number[] }>({
+        arr: [10, 20, 30],
+      });
+      let projectorExecutionCount = 0;
+
+      const array = store.selectSignal(
+        (x) => {
+          projectorExecutionCount++;
+          return x.arr;
+        },
+        {
+          equal: (a, b) => a.length === b.length,
+        }
+      );
+
+      array();
+      const result1 = array();
+      expect(result1).toEqual([10, 20, 30]);
+
+      store.patchState({ arr: [30, 20, 10] });
+
+      // should be equal to the previous value because of the custom equality
+      array();
+      const result2 = array();
+      expect(result2).toEqual([10, 20, 30]);
+      expect(result2).toBe(result1);
+      expect(projectorExecutionCount).toBe(2);
+
+      store.patchState({ arr: [10] });
+      array();
+      expect(array()).toEqual([10]);
+      expect(projectorExecutionCount).toBe(3);
+    });
+
+    it('creates a signal by combining provided signals', () => {
+      const store = new ComponentStore<{ x: number; y: number; z: number }>({
+        x: 1,
+        y: 10,
+        z: 100,
+      });
+      let projectorExecutionCount = 0;
+
+      const x = store.selectSignal((s) => s.x);
+      const y = store.selectSignal((s) => s.y);
+      const xPlusY = store.selectSignal(x, y, (x, y) => {
+        projectorExecutionCount++;
+        return x + y;
+      });
+
+      expect(xPlusY()).toBe(11);
+
+      // projector should not be executed
+      store.patchState({ z: 1000 });
+      xPlusY();
+
+      store.patchState({ x: 10 });
+      xPlusY();
+
+      expect(xPlusY()).toBe(20);
+      expect(projectorExecutionCount).toBe(2);
+    });
+
+    it('creates a signal by combining provided signals with options', () => {
+      const store = new ComponentStore<{ x: number; y: number }>({
+        x: 1,
+        y: 10,
+      });
+      let projectorExecutionCount = 0;
+
+      const x = store.selectSignal((s) => s.x);
+      const y = store.selectSignal((s) => s.y);
+      const xPlusY = store.selectSignal(
+        x,
+        y,
+        (x, y) => {
+          projectorExecutionCount++;
+          return x + y;
+        },
+        {
+          equal: (a: number, b: number) => Math.round(a) === Math.round(b),
+        }
+      );
+
+      expect(xPlusY()).toBe(11);
+
+      store.patchState({ x: 1.2 });
+      xPlusY();
+
+      // should be equal to the previous value because of the custom equality
+      expect(xPlusY()).toBe(11);
+      expect(projectorExecutionCount).toBe(2);
+
+      store.patchState({ x: 1.8 });
+      xPlusY();
+      expect(xPlusY()).toBe(11.8);
+      expect(projectorExecutionCount).toBe(3);
+    });
+
+    it('uses default equality function when equality function is not provided', () => {
+      type TestState = { foo: number; bar: { baz: number } };
+
+      class TestStore extends ComponentStore<TestState> {
+        readonly foo = this.selectSignal((s) => s.foo);
+        readonly bar = this.selectSignal((s) => s.bar);
+
+        #fooExecutionCount = 0;
+        readonly fooExecutionCount = computed(() => {
+          this.foo();
+          return ++this.#fooExecutionCount;
+        });
+
+        #barExecutionCount = 0;
+        readonly barExecutionCount = computed(() => {
+          this.bar();
+          return ++this.#barExecutionCount;
+        });
+
+        constructor() {
+          super({ foo: 0, bar: { baz: 0 } });
+        }
+      }
+
+      const store = new TestStore();
+      expect(store.fooExecutionCount()).toBe(1);
+      expect(store.barExecutionCount()).toBe(1);
+
+      store.patchState({ foo: 10 });
+      expect(store.fooExecutionCount()).toBe(2);
+      // bar should not be executed
+      expect(store.barExecutionCount()).toBe(1);
+
+      store.patchState({ foo: 10 });
+      // nothing updated, so execution count should remain the same
+      expect(store.fooExecutionCount()).toBe(2);
+      expect(store.barExecutionCount()).toBe(1);
+
+      store.patchState({ bar: { baz: 100 } });
+      // foo should not be executed
+      expect(store.fooExecutionCount()).toBe(2);
+      expect(store.barExecutionCount()).toBe(2);
+
+      store.patchState(({ bar }) => ({ bar }));
+      // nothing updated, so execution count should remain the same
+      expect(store.fooExecutionCount()).toBe(2);
+      expect(store.barExecutionCount()).toBe(2);
+
+      store.patchState({ foo: 1000 });
+      expect(store.fooExecutionCount()).toBe(3);
+      // bar should not be executed
+      expect(store.barExecutionCount()).toBe(2);
+    });
+
+    it('throws an error when the signal is read before the state initialization', () => {
+      const store = new ComponentStore<{ foo: string }>();
+      const foo = store.selectSignal((s) => s.foo);
+
+      expect(() => foo()).toThrowError();
     });
   });
 

@@ -17,7 +17,7 @@ In a service-based Angular application, components are responsible for interacti
 
 Detailed installation instructions can be found on the [Installation](guide/effects/install) page.
 
-## Comparison with component-based side effects
+## Comparison with Component-Based Side Effects
 
 In a service-based application, your components interact with data through many different services that expose data through properties and methods. These services may depend on other services that manage other sets of data. Your components consume these services to perform tasks, giving your components many responsibilities.
 
@@ -90,7 +90,7 @@ The movies are still fetched through the `MoviesService`, but the component is n
 
 ## Writing Effects
 
-To isolate side-effects from your component, you must create an `Effects` class to listen for events and perform tasks.
+To isolate side effects from your component, you can create NgRx effects to listen for events and perform tasks.
 
 Effects are injectable service classes with distinct parts:
 
@@ -100,21 +100,27 @@ Effects are injectable service classes with distinct parts:
 - Effects are subscribed to the `Store` observable.
 - Services are injected into effects to interact with external APIs and handle streams.
 
-To show how you handle loading movies from the example above, let's look at `MovieEffects`.
+<div class="alert is-helpful">
 
-<code-example header="movie.effects.ts">
+**Note:** Since NgRx v15.2, classes are not required to create effects. Learn more about functional effects [here](#functional-effects).
+
+</div>
+
+To show how you handle loading movies from the example above, let's look at `MoviesEffects`.
+
+<code-example header="movies.effects.ts">
 import { Injectable } from '@angular/core';
 import { Actions, createEffect, ofType } from '@ngrx/effects';
 import { EMPTY } from 'rxjs';
-import { map, mergeMap, catchError } from 'rxjs/operators';
+import { map, exhaustMap, catchError } from 'rxjs/operators';
 import { MoviesService } from './movies.service';
 
 @Injectable()
-export class MovieEffects {
+export class MoviesEffects {
 
   loadMovies$ = createEffect(() => this.actions$.pipe(
     ofType('[Movies Page] Load Movies'),
-    mergeMap(() => this.moviesService.getAll()
+    exhaustMap(() => this.moviesService.getAll()
       .pipe(
         map(movies => ({ type: '[Movies API] Movies Loaded Success', payload: movies })),
         catchError(() => EMPTY)
@@ -129,7 +135,7 @@ export class MovieEffects {
 }
 </code-example>
 
-The `loadMovies$` effect is listening for all dispatched actions through the `Actions` stream, but is only interested in the `[Movies Page] Load Movies` event using the `ofType` operator. The stream of actions is then flattened and mapped into a new observable using the `mergeMap` operator. The `MoviesService#getAll()` method returns an observable that maps the movies to a new action on success, and currently returns an empty observable if an error occurs. The action is dispatched to the `Store` where it can be handled by reducers when a state change is needed. It's also important to [handle errors](#handling-errors) when dealing with observable streams so that the effects continue running.
+The `loadMovies$` effect is listening for all dispatched actions through the `Actions` stream, but is only interested in the `[Movies Page] Load Movies` event using the `ofType` operator. The stream of actions is then flattened and mapped into a new observable using the `exhaustMap` operator. The `MoviesService#getAll()` method returns an observable that maps the movies to a new action on success, and currently returns an empty observable if an error occurs. The action is dispatched to the `Store` where it can be handled by reducers when a state change is needed. It's also important to [handle errors](#handling-errors) when dealing with observable streams so that the effects continue running.
 
 <div class="alert is-important">
 
@@ -141,20 +147,20 @@ The `loadMovies$` effect is listening for all dispatched actions through the `Ac
 
 Effects are built on top of observable streams provided by RxJS. Effects are listeners of observable streams that continue until an error or completion occurs. In order for effects to continue running in the event of an error in the observable, or completion of the observable stream, they must be nested within a "flattening" operator, such as `mergeMap`, `concatMap`, `exhaustMap` and other flattening operators. The example below shows the `loadMovies$` effect handling errors when fetching movies.
 
-<code-example header="movie.effects.ts">
+<code-example header="movies.effects.ts">
 import { Injectable } from '@angular/core';
 import { Actions, createEffect, ofType } from '@ngrx/effects';
 import { of } from 'rxjs';
-import { map, mergeMap, catchError } from 'rxjs/operators';
+import { map, exhaustMap, catchError } from 'rxjs/operators';
 import { MoviesService } from './movies.service';
 
 @Injectable()
-export class MovieEffects {
+export class MoviesEffects {
 
   loadMovies$ = createEffect(() =>
     this.actions$.pipe(
       ofType('[Movies Page] Load Movies'),
-      mergeMap(() => this.moviesService.getAll()
+      exhaustMap(() => this.moviesService.getAll()
         .pipe(
           map(movies => ({ type: '[Movies API] Movies Loaded Success', payload: movies })),
           catchError(() => of({ type: '[Movies API] Movies Loaded Error' }))
@@ -172,17 +178,69 @@ export class MovieEffects {
 
 The `loadMovies$` effect returns a new observable in case an error occurs while fetching movies. The inner observable handles any errors or completions and returns a new observable so that the outer stream does not die. You still use the `catchError` operator to handle error events, but return an observable of a new action that is dispatched to the `Store`.
 
-## Registering root effects
+## Functional Effects
 
-After you've written your Effects class, you must register it so the effects start running. To register root-level effects, add the `EffectsModule.forRoot()` method with an array of your effects to your `AppModule`.
+Functional effects are also created by using the `createEffect` function. They provide the ability to create effects outside the effect classes.
+
+To create a functional effect, add the `functional: true` flag to the effect config. Then, to inject services into the effect, use the [`inject` function](https://angular.io/api/core/inject).
+
+<code-example header="actors.effects.ts">
+import { inject } from '@angular/core';
+import { catchError, exhaustMap, map, of, tap } from 'rxjs';
+import { Actions, createEffect, ofType } from '@ngrx/effects';
+
+import { ActorsService } from './actors.service';
+import { ActorsPageActions } from './actors-page.actions';
+import { ActorsApiActions } from './actors-api.actions';
+
+export const loadActors = createEffect(
+  (actions$ = inject(Actions), actorsService = inject(ActorsService)) => {
+    return actions$.pipe(
+      ofType(ActorsPageActions.opened),
+      exhaustMap(() =>
+        actorsService.getAll().pipe(
+          map((actors) => ActorsApiActions.actorsLoadedSuccess({ actors })),
+          catchError((error: { message: string }) =>
+            of(ActorsApiActions.actorsLoadedFailure({ errorMsg: error.message }))
+          )
+        )
+      )
+    );
+  },
+  { functional: true }
+);
+
+export const displayErrorAlert = createEffect(
+  () => {
+    return inject(Actions).pipe(
+      ofType(ActorsApiActions.actorsLoadedFailure),
+      tap(({ errorMsg }) => alert(errorMsg))
+    );
+  },
+  { functional: true, dispatch: false }
+);
+</code-example>
+
+<div class="alert is-important">
+
+It's recommended to inject all dependencies as effect function arguments for easier testing. However, it's also possible to inject dependencies in the effect function body. In that case, the [`inject` function](https://angular.io/api/core/inject) must be called within the synchronous context.
+
+</div>
+
+## Registering Root Effects
+
+After you've written class-based or functional effects, you must register them so the effects start running. To register root-level effects, add the `EffectsModule.forRoot()` method with an array or sequence of effects classes and/or functional effects dictionaries to your `AppModule`.
 
 <code-example header="app.module.ts">
+import { NgModule } from '@angular/core';
 import { EffectsModule } from '@ngrx/effects';
-import { MovieEffects } from './effects/movie.effects';
+
+import { MoviesEffects } from './effects/movies.effects';
+import * as actorsEffects from './effects/actors.effects';
 
 @NgModule({
   imports: [
-    EffectsModule.forRoot([MovieEffects])
+    EffectsModule.forRoot(MoviesEffects, actorsEffects),
   ],
 })
 export class AppModule {}
@@ -204,12 +262,13 @@ import { provideStore } from '@ngrx/store';
 import { provideEffects } from '@ngrx/effects';
 
 import { AppComponent } from './app.component';
-import { MovieEffects } from './effects/movie.effects';
+import { MoviesEffects } from './effects/movies.effects';
+import * as actorsEffects from './effects/actors.effects';
 
 bootstrapApplication(AppComponent, {
   providers: [
     provideStore(),
-    provideEffects(MovieEffects)
+    provideEffects(MoviesEffects, actorsEffects),
   ],
 });
 </code-example>
@@ -220,17 +279,20 @@ Effects start running **immediately** after instantiation to ensure they are lis
 
 </div>
 
-## Registering feature effects
+## Registering Feature Effects
 
 For feature modules, register your effects by adding the `EffectsModule.forFeature()` method in the `imports` array of your `NgModule`.
 
 <code-example header="admin.module.ts">
+import { NgModule } from '@angular/core';
 import { EffectsModule } from '@ngrx/effects';
-import { MovieEffects } from './effects/movie.effects';
+
+import { MoviesEffects } from './effects/movies.effects';
+import * as actorsEffects from './effects/actors.effects';
 
 @NgModule({
   imports: [
-    EffectsModule.forFeature([MovieEffects])
+    EffectsModule.forFeature(MoviesEffects, actorsEffects)
   ],
 })
 export class MovieModule {}
@@ -244,13 +306,14 @@ Feature-level effects are registered in the `providers` array of the route confi
 import { Route } from '@angular/router';
 import { provideEffects } from '@ngrx/effects';
 
-import { MovieEffects } from './effects/movie.effects';
+import { MoviesEffects } from './effects/movies.effects';
+import * as actorsEffects from './effects/actors.effects';
 
 export const routes: Route[] = [
   {
     path: 'movies',
     providers: [
-      provideEffects(MovieEffects)
+      provideEffects(MoviesEffects, actorsEffects)
     ]
   }
 ];
@@ -262,17 +325,17 @@ export const routes: Route[] = [
 
 </div>
 
-## Alternative way of registering effects
+## Alternative Way of Registering Effects
 
 You can provide root-/feature-level effects with the provider `USER_PROVIDED_EFFECTS`.
 
 <code-example header="movies.module.ts">
 providers: [
-  MovieEffects,
+  MoviesEffects,
   {
     provide: USER_PROVIDED_EFFECTS,
     multi: true,
-    useValue: [MovieEffects],
+    useValue: [MoviesEffects],
   },
 ]
 </code-example>
@@ -282,6 +345,32 @@ providers: [
 The `EffectsModule.forFeature()` method or `provideEffects()` function must be added to the module imports/route config even if you only provide effects over token, and don't pass them through parameters. (Same goes for `EffectsModule.forRoot()`)
 
 </div>
+
+## Standalone API in module-based apps
+
+If you have a module-based Angular application, you can still use standalone components. NgRx standalone APIs support this workflow as well.
+
+For module-based apps, you have the `EffectsModule.forRoot([...])` included in the `imports` array of your `AppModule`, which registers the root effects for dependency injection. For a standalone component with feature state/effects registered in its route configuration to successfully run effects, you will need to use the `provideEffects([...])` function in the `providers` array of your `AppModule` to register the injection token. For module-based with standalone components, you will simply have both. 
+
+<code-example header="app.module.ts">
+import { NgModule } from '@angular/core';
+import { EffectsModule, provideEffects } from '@ngrx/effects';
+
+import { MoviesEffects } from './effects/movies.effects';
+import * as actorsEffects from './effects/actors.effects';
+
+@NgModule({
+  imports: [
+    EffectsModule.forRoot(MoviesEffects, actorsEffects),
+  ],
+  providers: [
+    provideEffects(MoviesEffects, actorsEffects)
+  ]
+})
+export class AppModule {}
+</code-example>
+
+<div class="alert is-critical">
 
 ## Incorporating State
 
@@ -406,4 +495,3 @@ export class UserActivityEffects {
   ) {}
 }
 </code-example>
-

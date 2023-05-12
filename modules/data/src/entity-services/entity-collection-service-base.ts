@@ -17,8 +17,6 @@ import { EntitySelectors } from '../selectors/entity-selectors';
 import { EntitySelectors$ } from '../selectors/entity-selectors$';
 import { QueryParams } from '../dataservices/interfaces';
 
-/* eslint-disable @typescript-eslint/member-ordering */
-
 /**
  * Base class for a concrete EntityCollectionService<T>.
  * Can be instantiated. Cannot be injected. Use EntityCollectionServiceFactory to create.
@@ -243,6 +241,22 @@ export class EntityCollectionServiceBase<
    */
   load(options?: EntityActionOptions): Observable<T[]> {
     return this.dispatcher.load(options);
+  }
+
+  /**
+   * Dispatch action to query remote storage for the entities that satisfy a query expressed
+   * with either a query parameter map or an HTTP URL query string,
+   * and completely replace the cached collection with the queried entities.
+   * @param queryParams the query in a form understood by the server
+   * @param [options] options that influence load behavior
+   * @returns Observable of the queried entities
+   * after server reports successful query or the query error.
+   */
+  loadWithQuery(
+    queryParams: QueryParams | string,
+    options?: EntityActionOptions
+  ): Observable<T[]> {
+    return this.dispatcher.loadWithQuery(queryParams, options);
   }
 
   /**

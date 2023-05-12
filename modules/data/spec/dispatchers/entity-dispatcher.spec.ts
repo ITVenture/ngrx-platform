@@ -113,6 +113,18 @@ export function commandDispatchTest(
         expect(data).toBe(42);
       });
 
+      it('#delete(42) with a query param dispatches SAVE_DELETE_ONE optimistically for the id:42', () => {
+        dispatcher.delete(42, {
+          httpOptions: { httpParams: { fromObject: { queryParam1: 1 } } },
+        }); // optimistic by default
+        const { entityOp, isOptimistic, data, httpOptions } =
+          dispatchedAction().payload;
+        expect(entityOp).toBe(EntityOp.SAVE_DELETE_ONE);
+        expect(isOptimistic).toBe(true);
+        expect(data).toBe(42);
+        expect(httpOptions?.httpParams?.fromObject?.queryParam1).toBe(1);
+      });
+
       it('#delete(hero) dispatches SAVE_DELETE_ONE optimistically for the hero.id', () => {
         const id = 42;
         const hero: Hero = { id, name: 'test' };
@@ -143,6 +155,23 @@ export function commandDispatchTest(
         expect(entityOp).toBe(EntityOp.SAVE_ADD_ONE);
         expect(isOptimistic).toBe(false);
         expect(data).toBe(hero);
+      });
+
+      it('#add(hero) dispatches SAVE_ADD pessimistically with partial hero', () => {
+        const hero: Partial<Hero> = { name: 'test' };
+        dispatcher.add(hero);
+        const { entityOp, isOptimistic, data } = dispatchedAction().payload;
+        expect(entityOp).toBe(EntityOp.SAVE_ADD_ONE);
+        expect(isOptimistic).toBe(false);
+        expect(data).toBe(hero);
+
+        testStore.dispatch.calls.reset();
+
+        dispatcher.add(hero, { isOptimistic: false });
+        const specificallyPessimistic = dispatchedAction().payload;
+        expect(specificallyPessimistic.entityOp).toBe(EntityOp.SAVE_ADD_ONE);
+        expect(specificallyPessimistic.isOptimistic).toBe(false);
+        expect(specificallyPessimistic.data).toBe(hero);
       });
 
       it('#delete(42) can dispatch SAVE_DELETE pessimistically for the id:42', () => {
@@ -261,6 +290,17 @@ export function commandDispatchTest(
       expect(entityOp).toBe(EntityOp.QUERY_LOAD);
       expect(entityName).toBe('Hero');
       expect(mergeStrategy).toBeUndefined();
+    });
+
+    it('#loadWithQuery() dispatches QUERY_MANY', () => {
+      dispatcher.loadWithQuery('name=B');
+
+      const { entityOp, data, entityName, mergeStrategy } =
+        dispatchedAction().payload;
+      expect(entityOp).toBe(EntityOp.QUERY_MANY);
+      expect(entityName).toBe('Hero');
+      expect(data).toEqual('name=B');
+      expect(mergeStrategy).toBeUndefined(); //?
     });
   });
 

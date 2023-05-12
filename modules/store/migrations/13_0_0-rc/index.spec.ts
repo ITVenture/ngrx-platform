@@ -4,7 +4,6 @@ import {
   UnitTestTree,
 } from '@angular-devkit/schematics/testing';
 import * as path from 'path';
-import { createSelector } from '@ngrx/store';
 
 describe('Store Migration 13_0_1', () => {
   const collectionPath = path.join(__dirname, '../migration.json');
@@ -42,9 +41,11 @@ const selectorWithTwoSlicesWithGenericArgsWithWhitespace = createSelector<State,
     appTree.create('./fixture.ts', contents);
     const runner = new SchematicTestRunner('schematics', collectionPath);
 
-    const newTree = await runner
-      .runSchematicAsync(`ngrx-${pkgName}-migration-13-rc`, {}, appTree)
-      .toPromise();
+    const newTree = await runner.runSchematic(
+      `ngrx-${pkgName}-migration-13-rc`,
+      {},
+      appTree
+    );
     const file = newTree.readContent('fixture.ts');
 
     expect(file).toBe(expected);

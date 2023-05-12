@@ -44,5 +44,5 @@ export {
   MinimalRouterStateSnapshot,
   MinimalRouterStateSerializer,
 } from './serializers/minimal_serializer';
-export { getSelectors, createRouterSelector } from './router_selectors';
+export { getRouterSelectors, createRouterSelector } from './router_selectors';
 export { provideRouterStore } from './provide_router_store';

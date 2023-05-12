@@ -32,8 +32,13 @@ import {
   InjectionToken,
   Inject,
   isDevMode,
+  Signal,
+  computed,
+  type ValueEqualityFn,
+  type CreateComputedOptions,
 } from '@angular/core';
 import { isOnStateInitDefined, isOnStoreInitDefined } from './lifecycle_hooks';
+import { toSignal } from '@angular/core/rxjs-interop';
 
 export interface SelectConfig {
   debounce?: boolean;
@@ -53,6 +58,21 @@ export type Projector<Selectors extends Observable<unknown>[], Result> = (
   ...args: SelectorResults<Selectors>
 ) => Result;
 
+type SignalsProjector<Signals extends Signal<unknown>[], Result> = (
+  ...values: {
+    [Key in keyof Signals]: Signals[Key] extends Signal<infer Value>
+      ? Value
+      : never;
+  }
+) => Result;
+
+interface SelectSignalOptions<T> {
+  /**
+   * A comparison function which defines equality for select results.
+   */
+  equal?: ValueEqualityFn<T>;
+}
+
 @Injectable()
 export class ComponentStore<T extends object> implements OnDestroy {
   // Should be used only in ngOnDestroy.
@@ -64,6 +84,10 @@ export class ComponentStore<T extends object> implements OnDestroy {
   private isInitialized = false;
   // Needs to be after destroy$ is declared because it's used in select.
   readonly state$: Observable<T> = this.select((s) => s);
+  readonly state: Signal<T> = toSignal(
+    this.stateSubject$.pipe(takeUntil(this.destroy$)),
+    { requireSync: false, manualCleanup: true }
+  ) as Signal<T>;
   private ɵhasProvider = false;
 
   constructor(@Optional() @Inject(INITIAL_STATE_TOKEN) defaultState?: T) {
@@ -137,7 +161,7 @@ export class ComponentStore<T extends object> implements OnDestroy {
               return EMPTY;
             }
 
-            return throwError(() => error);
+            return throwError(error);
           }),
           takeUntil(this.destroy$)
         )
@@ -267,8 +291,8 @@ export class ComponentStore<T extends object> implements OnDestroy {
       (projector
         ? map((projectorArgs) =>
             // projectorArgs could be an Array in case where the entire state is an Array, so adding this check
-            observablesOrSelectorsObject.length > 0 &&
-            Array.isArray(projectorArgs)
+            (observablesOrSelectorsObject as Observable<unknown>[]).length >
+              0 && Array.isArray(projectorArgs)
               ? projector(...projectorArgs)
               : projector(projectorArgs)
           )
@@ -280,6 +304,70 @@ export class ComponentStore<T extends object> implements OnDestroy {
       }),
       takeUntil(this.destroy$)
     );
+  }
+
+  /**
+   * Creates a signal from the provided state projector function.
+   */
+  selectSignal<Result>(
+    projector: (state: T) => Result,
+    options?: SelectSignalOptions<Result>
+  ): Signal<Result>;
+  /**
+   * Creates a signal by combining provided signals.
+   */
+  selectSignal<Signals extends Signal<unknown>[], Result>(
+    ...args: [...signals: Signals, projector: SignalsProjector<Signals, Result>]
+  ): Signal<Result>;
+  /**
+   * Creates a signal by combining provided signals.
+   */
+  selectSignal<Signals extends Signal<unknown>[], Result>(
+    ...args: [
+      ...signals: Signals,
+      projector: SignalsProjector<Signals, Result>,
+      options: SelectSignalOptions<Result>
+    ]
+  ): Signal<Result>;
+  selectSignal(
+    ...args:
+      | [(state: T) => unknown, SelectSignalOptions<unknown>?]
+      | [
+          ...signals: Signal<unknown>[],
+          projector: (...values: unknown[]) => unknown
+        ]
+      | [
+          ...signals: Signal<unknown>[],
+          projector: (...values: unknown[]) => unknown,
+          options: SelectSignalOptions<unknown>
+        ]
+  ): Signal<unknown> {
+    const selectSignalArgs = [...args];
+    const defaultEqualityFn: ValueEqualityFn<unknown> = (previous, current) =>
+      previous === current;
+
+    const options: CreateComputedOptions<unknown> =
+      typeof selectSignalArgs[args.length - 1] === 'object'
+        ? {
+            equal:
+              (selectSignalArgs.pop() as SelectSignalOptions<unknown>).equal ||
+              defaultEqualityFn,
+          }
+        : { equal: defaultEqualityFn };
+    const projector = selectSignalArgs.pop() as (
+      ...values: unknown[]
+    ) => unknown;
+    const signals = selectSignalArgs as Signal<unknown>[];
+
+    const computation =
+      signals.length === 0
+        ? () => projector(this.state())
+        : () => {
+            const values = signals.map((signal) => signal());
+            return projector(...values);
+          };
+
+    return computed(computation, options);
   }
 
   /**

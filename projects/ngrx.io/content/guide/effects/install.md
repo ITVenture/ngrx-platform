@@ -25,6 +25,7 @@ This command will automate the following steps:
 1. Update `package.json` > `dependencies` with `@ngrx/effects`.
 2. Run `npm install` to install those dependencies. 
 3. Update your `src/app/app.module.ts` > `imports` array with `EffectsModule.forRoot([AppEffects])`. If you provided flags then the command will attempt to locate and update module found by the flags.
+4. If the project is using a `standalone bootstrap`, it adds `provideEffects()` into the application config.
 
 ## Installing with `npm`
 

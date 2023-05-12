@@ -1,17 +1,16 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { skip, take } from 'rxjs/operators';
 import {
-  getMockStore,
+  createMockStore,
   MockReducerManager,
   MockState,
   MockStore,
   provideMockStore,
-} from '@ngrx/store/testing';
+} from '../index';
 import {
   Store,
   createSelector,
   select,
-  StoreModule,
   MemoizedSelector,
   createFeatureSelector,
   isNgrxMockEnvironment,
@@ -410,11 +409,11 @@ describe('Mock Store with Injector', () => {
     });
   });
 
-  describe('getMockStore', () => {
+  describe('createMockStore', () => {
     let mockStore: MockStore<typeof initialState>;
 
     beforeEach(() => {
-      mockStore = getMockStore({ initialState, selectors: [mockSelector] });
+      mockStore = createMockStore({ initialState, selectors: [mockSelector] });
     });
 
     it('should create MockStore', (done: any) => {

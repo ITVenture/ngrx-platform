@@ -20,6 +20,12 @@ import {
   platformVersion,
 } from '../../schematics-core';
 import { Schema as RouterStoreOptions } from './schema';
+import {
+  addFunctionalProvidersToStandaloneBootstrap,
+  callsProvidersFunction,
+} from '@schematics/angular/private/standalone';
+import { getProjectMainFile } from '../../schematics-core/utility/project';
+import { isStandaloneApp } from '../../schematics-core/utility/standalone';
 
 function addImportToNgModule(options: RouterStoreOptions): Rule {
   return (host: Tree) => {
@@ -88,11 +94,49 @@ function addNgRxRouterStoreToPackageJson() {
   };
 }
 
+function addStandaloneConfig(options: RouterStoreOptions): Rule {
+  return (host: Tree) => {
+    const mainFile = getProjectMainFile(host, options);
+
+    if (host.exists(mainFile)) {
+      const providerFn = 'provideRouterStore';
+
+      if (callsProvidersFunction(host, mainFile, providerFn)) {
+        // exit because the store config is already provided
+        return host;
+      }
+
+      const providerOptions: ts.Identifier[] = [];
+
+      const patchedConfigFile = addFunctionalProvidersToStandaloneBootstrap(
+        host,
+        mainFile,
+        providerFn,
+        '@ngrx/router-store',
+        providerOptions
+      );
+
+      const recorder = host.beginUpdate(patchedConfigFile);
+
+      host.commitUpdate(recorder);
+
+      return host;
+    }
+
+    throw new SchematicsException(
+      `Main file not found for a project ${options.project}`
+    );
+  };
+}
+
 export default function (options: RouterStoreOptions): Rule {
   return (host: Tree, context: SchematicContext) => {
+    const mainFile = getProjectMainFile(host, options);
+    const isStandalone = isStandaloneApp(host, mainFile);
+
     options.path = getProjectPath(host, options);
 
-    if (options.module) {
+    if (options.module && !isStandalone) {
       options.module = findModuleFromOptions(host, {
         name: '',
         module: options.module,
@@ -103,8 +147,12 @@ export default function (options: RouterStoreOptions): Rule {
     const parsedPath = parseName(options.path, '');
     options.path = parsedPath.path;
 
+    const configOrModuleUpdate = isStandalone
+      ? addStandaloneConfig(options)
+      : addImportToNgModule(options);
+
     return chain([
-      branchAndMerge(chain([addImportToNgModule(options)])),
+      branchAndMerge(chain([configOrModuleUpdate])),
       options && options.skipPackageJson
         ? noop()
         : addNgRxRouterStoreToPackageJson(),

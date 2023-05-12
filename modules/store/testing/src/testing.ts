@@ -141,7 +141,7 @@ function mockStoreFactory<T>(
  *   let store: MockStore;
  *
  *   beforeEach(() => {
- *     store = getMockStore({
+ *     store = createMockStore({
  *       initialState: { books: { entities: ['Book 1', 'Book 2', 'Book 3'] } },
  *       selectors: [
  *         { selector: selectAllBooks, value: ['Book 1', 'Book 2'] },
@@ -152,7 +152,9 @@ function mockStoreFactory<T>(
  * });
  * ```
  */
-export function getMockStore<T>(config: MockStoreConfig<T> = {}): MockStore<T> {
+export function createMockStore<T>(
+  config: MockStoreConfig<T> = {}
+): MockStore<T> {
   const injector = Injector.create({ providers: provideMockStore(config) });
   return injector.get(MockStore);
 }
